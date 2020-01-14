@@ -1,2 +1,2 @@
-# NB-IoT_Gateway_ESP32
+# ESPGW32_Lib
 Student's project @kmutnb
