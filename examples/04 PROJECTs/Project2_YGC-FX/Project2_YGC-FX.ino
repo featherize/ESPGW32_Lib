@@ -3,15 +3,15 @@
  * Board Select  : ESP32vn IoT Uno
  * Description   : Send <Wind direction> packet to server every 15 minutes
  *                 and restart itself everyday at 3 pm
- * Packet format : <projectName>,<nodeName>,<data>,<packet_no>
- * Last update   : 14 JAN 2020
+ * Packet format : <projectName>,<nodeName>,<direction>,<packet_no>
+ * Last update   : 20 JAN 2020
  * Author        : CprE13-KMUTNB
  ***********************************************************************
  * Note : 
  * - Beware! Connect ESPGW32 with NBIoT-shield correctly.
  * - Move both JUMPERs to RS485 position.
  * - Wiring with YGC-FX (RED:12V),(BLACK:A+),(YELLOW:B-),(GREEN:GND)
- * - Install YGC-FX correctly for correct data
+ * - Install YGC-FX position correctly for correct data
 ***********************************************************************/
 
 #include "ESPGW32.h"
@@ -99,10 +99,12 @@ void loop() {
     packet += (String)dir;
     packet += ",";
     packet += (String)(packet_no++);
-    Serial.print("packet send : ");
-    Serial.println(packet);
-    Serial.println("<---------------------------------------->");
-    modem.sendUDPstr(HOST,PORT,packet);
+    if(cntInt == 0) {
+      Serial.print("packet send : ");
+      Serial.println(packet);
+      Serial.println("<---------------------------------------->");
+      modem.sendUDPstr(HOST,PORT,packet);
+    }
   }
   
   // When ESP32 is interrupted by RTC
