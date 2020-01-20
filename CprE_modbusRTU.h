@@ -24,7 +24,7 @@ class CprE_modbusRTU {
 		void sendReadInput(uint8_t SS, int start_addr, int reg_len);
 		
 		int8_t recv_byte(uint8_t SS);	// return only highest-order data
-		int    recv_int(uint8_t SS);	// return all data in [int] format
+		long   recv_int(uint8_t SS);	// return all data in [long] format
 		float  recv_float(uint8_t SS);	// return 4 bytes data in [float] format
 		String recv_string(uint8_t SS);	// return all data in [String] format
 		
