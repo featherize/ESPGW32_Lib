@@ -181,12 +181,14 @@ int8_t CprE_modbusRTU::recv_byte(uint8_t SS) {
 		return -1;
 }
 
-int CprE_modbusRTU::recv_int(uint8_t SS) {
+long CprE_modbusRTU::recv_int(uint8_t SS) {
 	recv(SS);
 	if(!getError()) {
-		int val;
-		val = buf[indexData] << 8;
-		val ^= buf[indexData+1];
+		long val = 0;
+		for(int i=indexData; i<=lastIndexData; i++) {
+			val = val << 8;
+			val = val ^ buf[i];
+		}
 		return val;
 	}
 	else 
