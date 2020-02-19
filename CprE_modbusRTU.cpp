@@ -61,17 +61,17 @@ void CprE_modbusRTU::sendpacket(uint8_t* packet, int length, bool auto_crc) {
 		crcB = crc >> 8;
 	}
 	
-	uint32_t br = _serial->baudRate();	// Get baudrate of _serial
-	uint16_t gap_t = (240000UL / br);	// Silent time (ms) before and after sending frame
+	uint32_t br = _serial->baudRate();           	// Get baudrate of _serial
+	uint16_t dTime = round((96000UL / br) + 0.5);	// Silent time (ms) before and after sending frame
 	
 	digitalWrite(_dirpin,HIGH);
-	delay(gap_t);
+	delay(dTime);
 	_serial->write(packet,length);
 	if(auto_crc) {
 		_serial->write(crcA);
 		_serial->write(crcB);
 	}
-	delay(gap_t);
+	delay(dTime);
 	digitalWrite(_dirpin,LOW);
 }
 
