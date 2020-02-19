@@ -206,11 +206,11 @@ float CprE_modbusRTU::recv_float(uint8_t SS) {
 			float f;
 		} myFloat;
 		
-		myFloat data;
+		myFloat val;
 		for(uint8_t i=0; i<4; i++) {
-			data.num[i] = buf[indexData+i];
+			val.num[i] = buf[lastIndexData-i];
 		}
-		return data.f;
+		return val.f;
 	}
 	else 
 		return -1.0;
