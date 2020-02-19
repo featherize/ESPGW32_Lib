@@ -5,7 +5,7 @@
  *                 and restart itself everyday at 3 pm
  * Packet format : <projectName>,<nodeName>,<voltage>,<current>,
  *                 <frequency>,<power>,<energy>,<packet_no>
- * Last update   : 20 JAN 2020
+ * Last update   : 19 FEB 2020
  * Author        : CprE13-KMUTNB
  ***********************************************************************
  * Note : 
@@ -35,7 +35,7 @@ void IRAM_ATTR isr() {
 
 void setup() {
   Serial.begin(9600);
-  Serial1.begin(9600,SERIAL_8N1,RXmax,TXmax);   // connect to RS485 device
+  Serial1.begin(1200,SERIAL_8E1,RXmax,TXmax);   // connect to RS485 device
   Serial2.begin(9600,SERIAL_8N1,Uno8,Uno9);     // connect to NBIoT shield
   m_rtu.initSerial(Serial1, DIRPIN);
   modem.init(Serial2);
