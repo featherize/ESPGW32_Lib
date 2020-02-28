@@ -4,7 +4,7 @@ int CprE_modbusRTU::buf_length() {
 	return indexMax;
 }
 
-void CprE_modbusRTU::initSerial(Stream &serial, int dirpin) {
+void CprE_modbusRTU::initSerial(HardwareSerial &serial, int dirpin) {
 	_serial = &serial;
 	_dirpin = dirpin;
 	pinMode(dirpin, OUTPUT);
