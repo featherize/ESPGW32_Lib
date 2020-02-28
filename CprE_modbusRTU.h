@@ -9,7 +9,7 @@ class CprE_modbusRTU {
 		uint8_t buf[128];
 		int buf_length();
 		
-		void initSerial(Stream &serial, int dirpin);
+		void initSerial(HardwareSerial &serial, int dirpin);
 		uint8_t getError();
 		String errorReport();
 		void crc16_update(uint16_t &crc_holder, uint8_t byteIn);
@@ -29,7 +29,7 @@ class CprE_modbusRTU {
 		String recv_string(uint8_t SS);	// return all data in [String] format
 		
 	private:
-		Stream* _serial;
+		HardwareSerial* _serial;
 		int _dirpin;
 		int8_t indexMax = 0;
 		int8_t indexPacket = 0;
