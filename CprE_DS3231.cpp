@@ -22,6 +22,23 @@ void CprE_DS3231::writeAddr(byte reg, byte val) {
 	Wire.endTransmission();
 }
 
+DateTime CprE_DS3231::now() {
+  Wire.beginTransmission(DS3231_ADDRESS);
+  Wire.write((byte)0);
+  Wire.endTransmission();
+
+  Wire.requestFrom(DS3231_ADDRESS, (byte)7);
+  uint8_t ss = bcd2bin(Wire.read() & 0x7F);
+  uint8_t mm = bcd2bin(Wire.read());
+  uint8_t hh = bcd2bin(Wire.read());
+  Wire.read();
+  uint8_t d = bcd2bin(Wire.read());
+  uint8_t m = bcd2bin(Wire.read());
+  uint16_t y = bcd2bin(Wire.read()) + 2000;
+
+  return DateTime(y, m, d, hh, mm, ss);
+}
+
 String CprE_DS3231::currentTime() {
 	uint8_t s, m, h;
 	Wire.beginTransmission(DS3231_ADDRESS);
