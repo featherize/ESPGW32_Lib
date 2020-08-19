@@ -1,13 +1,13 @@
 /***********************************************************************
  * Project       : Weather-Station
  * Board Select  : ESP32vn IoT Uno
- * Description   : Send <Wind Speed>,<Wind Direction>,<EnergyUsage> 
+ * Description   : Send <Wind Speed>,<Wind Direction> and <EnergyUsage> 
  *                 packets to server via WiFi every 5 minutes (Also save
  *                 log in SDcard) and restart itself everyday at 6 am
  * Packet format : <projectName>,<date>,<time>,<w-speed>,<w-direction>,
- *                 <e-volt_A>,<e-current_A>,<e-energy_A>,<e-volt_B>,
- *                 <e-current_B>,<e-energy_B>
- * Last update   : 14 AUG 2020
+ *                 <e-volt_A>,<e-current_A>,<e-power_A>,<e-energy_A>,
+ *                 <e-volt_B>,<e-current_B>,<e-power_B>,<e-energy_B>
+ * Last update   : 19 AUG 2020
  * Author        : CprE13-KMUTNB
  ***********************************************************************
  * Note : 
@@ -50,8 +50,12 @@ unsigned long interval = 300000;   // interval time of each packet
 int sck = 21;    // SPI connect to SDcard module
 int miso = 19;
 int mosi = 18;
-int cs = 5;
-const char *logFile = "/datalog.txt";
+int cs = 14;
+const char *logFile = "/datalogs.txt";
+
+#define INET   0x10
+#define CARD   0x01
+uint8_t db_ready = 0x11;	// internet || sdcard
 
 void writeFile(fs::FS &fs, const char * path, const char * message){
   Serial.printf("Writing file: %s\n", path);
@@ -86,8 +90,8 @@ void appendFile(fs::FS &fs, const char * path, const char * message){
 }
 
 void IRAM_ATTR isr() {
-    Serial.println("*** INTERRUPT! ***");
-    ++cntInt;   // increase <cntInt> when got interrupted
+  Serial.println("*** INTERRUPT! ***");
+  ++cntInt;   // increase <cntInt> when got interrupted
 }
 
 void setup() {
@@ -104,18 +108,17 @@ void setup() {
   Serial.println("# Initialize WiFi...");
   WiFi.begin(SSID, PASS);
   uint8_t waitwifi = 20;
-  bool netready = true;
   while (WiFi.status() != WL_CONNECTED) { // wait for connection
     delay(500);
     Serial.print(".");
     waitwifi--;
     if(waitwifi <= 0) {
       Serial.print("Connect Fail!");
-      netready = false;
+      db_ready &= ~INET;
       break;
     }
   }
-  if(netready) {
+  if(db_ready & INET) {
     Serial.println();
     Serial.print("Connected to ");
     Serial.println(SSID);
@@ -146,17 +149,16 @@ void setup() {
   // Initialize SD card Module
   Serial.print("# Initialize SD card...");
   SPI.begin(sck, miso, mosi, cs);
-  bool sdready = true;
   if(!SD.begin(cs)) {
     Serial.println("Card Mount Failed");
-    sdready = false;
+    db_ready &= ~CARD;
   }
   uint8_t cardType = SD.cardType();
-  if((cardType == CARD_NONE) && sdready) {
+  if((cardType == CARD_NONE) && (db_ready & CARD)) {
     Serial.println("No SD card attached");
-    sdready = false;
+    db_ready &= ~CARD;
   }
-  if(sdready) {
+  if(db_ready & CARD) {
     Serial.println("DONE");
     File file = SD.open(logFile);
     if(!file) {
@@ -164,9 +166,9 @@ void setup() {
       Serial.println("Creating file...");
       // write header of file
       const char *header = "\"projectName\",\"date\",\"time\","
-                           "\"w-speed\",\"w-direction\",\"e-volt_A\","
-                           "\"e-current_A\",\"e-energy_A\",\"e-volt_B\","
-                           "\"e-current_B\",\"e-energy_B\"";
+                           "\"w-speed\",\"w-direction\","
+                           "\"e-volt_A\",\"e-current_A\",\"e-power_A\",\"e-energy_A\","
+                           "\"e-volt_B\",\"e-current_B\",\"e-power_B\",\"e-energy_B\"";
       writeFile(SD, logFile, header);
     }
     else {
@@ -174,7 +176,7 @@ void setup() {
     }
     file.close();
   }
-  if(!netready && !sdready) {
+  if(db_ready == 0) {
     Serial.println("# Cannot connect to both WiFi and SDCard");
     Serial.println("# Restart ESP");
     Serial.println("**************************************************");
@@ -194,13 +196,16 @@ void loop() {
     Serial.println("Wind speed                    : " + (String)windspeed + " m/s");
     m_rtu.sendReadHolding(YGCFX_ADDR,0,1);      // read wind direction
     int winddir = m_rtu.recv_int(YGCFX_ADDR);
-    Serial.println("Wind direction (south\u21bb)       : " + (String)winddir + "\u00B0");
+    Serial.println("Wind direction (ref\u21bb)     : " + (String)winddir + "\u00B0");
     m_rtu.sendReadInput(SDM_ADDR_A,0,2);      // read voltage
     float voltA = m_rtu.recv_float(SDM_ADDR_A);
     Serial.println("Voltage (meter_A)             : " + (String)voltA + " Volts");
     m_rtu.sendReadInput(SDM_ADDR_A,6,2);        // read current
     float currentA = m_rtu.recv_float(SDM_ADDR_A);
     Serial.println("Current (meter_A)             : " + (String)currentA + " Amps");
+    m_rtu.sendReadInput(SDM_ADDR_A,12,2);       // read active power
+    float actPowerA = m_rtu.recv_float(SDM_ADDR_A);
+    Serial.println("Active Power (meter_A)        : " + (String)actPowerA + " Watts");
     m_rtu.sendReadInput(SDM_ADDR_A,342,2);      // read total active energy
     float totalActA = m_rtu.recv_float(SDM_ADDR_A);
     Serial.println("Total Active Energy (meter_A) : " + (String)totalActA + " kWh");
@@ -210,6 +215,9 @@ void loop() {
     m_rtu.sendReadInput(SDM_ADDR_B,6,2);        // read current
     float currentB = m_rtu.recv_float(SDM_ADDR_B);
     Serial.println("Current (meter_B)             : " + (String)currentB + " Amps");
+    m_rtu.sendReadInput(SDM_ADDR_B,12,2);       // read active power
+    float actPowerB = m_rtu.recv_float(SDM_ADDR_B);
+    Serial.println("Active Power (meter_B)        : " + (String)actPowerB + " Watts");
     m_rtu.sendReadInput(SDM_ADDR_B,342,2);      // read total active energy
     float totalActB = m_rtu.recv_float(SDM_ADDR_B);
     Serial.println("Total Active Energy (meter_B) : " + (String)totalActB + " kWh");
@@ -229,29 +237,39 @@ void loop() {
     packet += ",";
     packet += (String)currentA;
     packet += ",";
+    packet += (String)actPowerA;
+    packet += ",";
     packet += (String)totalActA;
     packet += ",";
     packet += (String)voltB;
     packet += ",";
     packet += (String)currentB;
     packet += ",";
+    packet += (String)actPowerB;
+    packet += ",";
     packet += (String)totalActB;
     
-    // send data via WiFi
-    // save data in SD-Card
+    // When no INTERRUPT 
     if(cntInt == 0) {
       Serial.print("packet send : ");
       Serial.println(packet);
+      // send data via WiFi
       uint8_t udpPack[150];
       packet.getBytes(udpPack, packet.length()+1);
       udp.beginPacket(HOST, String(PORT).toInt());
       udp.write(udpPack, packet.length());
       udp.endPacket();
       memset(udpPack, 0, 150);  // clean buffer
-	  
-      Serial.println("Save data to SDcard...");
-      packet += "\r\n";
-      appendFile(SD, logFile, packet.c_str());
+      // save data in SD-Card
+      if(db_ready & CARD) {
+        Serial.println("Save data to SDcard...");
+        packet += "\r\n";
+        appendFile(SD, logFile, packet.c_str());
+      }
+      else {
+        Serial.println("SDcard is unavailable...");
+        Serial.println("To use SDcard, please fix connection then restart ESP");
+      }
       Serial.println("<---------------------------------------->");
     }
   }
