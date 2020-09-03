@@ -7,7 +7,7 @@
 int sck = 21;
 int miso = 19;
 int mosi = 18;
-int cs = 5;
+int cs = 14;
 // logging fileName & interval time
 String logFile = "/datalog.txt";
 unsigned long prev_t = 0;

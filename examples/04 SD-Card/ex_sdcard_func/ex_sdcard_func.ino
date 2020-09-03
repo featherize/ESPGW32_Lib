@@ -8,7 +8,7 @@
 int sck = 21;
 int miso = 19;
 int mosi = 18;
-int cs = 5;
+int cs = 14;
 
 void setup() {
   Serial.begin(9600);
