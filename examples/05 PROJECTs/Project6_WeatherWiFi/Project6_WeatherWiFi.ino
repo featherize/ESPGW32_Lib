@@ -7,7 +7,7 @@
  * Packet format : <projectName>,<date>,<time>,<w-speed>,<w-direction>,
  *                 <e-volt_A>,<e-current_A>,<e-power_A>,<e-energy_A>,
  *                 <e-volt_B>,<e-current_B>,<e-power_B>,<e-energy_B>
- * Last update   : 19 AUG 2020
+ * Last update   : 04 SEP 2020
  * Author        : CprE13-KMUTNB
  ***********************************************************************
  * Note : 
@@ -277,5 +277,9 @@ void loop() {
   // When ESP32 is interrupted by RTC
   if(cntInt > 0) {
     ESP.restart();    // restart ESP when got an interrupt
+  }
+
+  if(WiFi.status() != WL_CONNECTED) {
+    WiFi.reconnect();
   }
 }
