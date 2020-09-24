@@ -7,7 +7,7 @@
  * Packet format : <projectName>,<date>,<time>,<w-speed>,<w-direction>,
  *                 <e-volt_A>,<e-current_A>,<e-power_A>,<e-energy_A>,
  *                 <e-volt_B>,<e-current_B>,<e-power_B>,<e-energy_B>
- * Last update   : 04 SEP 2020
+ * Last update   : 23 SEP 2020
  * Author        : CprE13-KMUTNB
  ***********************************************************************
  * Note : 
@@ -28,8 +28,8 @@
 #define SSID        ""    // WIFI name
 #define PASS        ""    // WIFI password
 
-#define HOST        ""      // server ip
-#define PORT        ""      // server udp port
+#define HOST        ""    // server ip
+#define PORT        ""    // server udp port
 
 #define YGCFS_ADDR     4
 #define YGCFX_ADDR     5
@@ -50,9 +50,7 @@ int miso = 19;
 int mosi = 18;
 int cs = 14;
 const char *logFile = "/datalogs.txt";
-
-#define CARD   0x01
-uint8_t db_ready = 0x11;  // state check
+unsigned long rtcTime_st;    // RTC time when setup() is running
 
 void writeFile(fs::FS &fs, const char * path, const char * message){
   Serial.printf("Writing file: %s\n", path);
@@ -125,11 +123,13 @@ void setup() {
   rtc.clearFlag();
   rtc.disableAlarm();
   if(rtc.lostPower()) {
-    Serial.println("Power lost! Set RTC time!");
-    rtc.adjust(DateTime(F(__DATE__),F(__TIME__)));
+    Serial.println("Power lost! Time is not accurate!");
+    // Serial.println("Power lost! Set RTC time!");
+    // rtc.adjust(DateTime(F(__DATE__),F(__TIME__)));
   }
   rtc.setAlarm1(6,00,00,0,false,'D');  // interrupt every day at 6am
   rtc.enableAlarm(1);
+  rtcTime_st = rtc.now().unixtime();
   Serial.println("Time   = " + rtc.currentTime());
   Serial.println("Alarm1 = " + rtc.getAlarm1());
 
@@ -139,18 +139,19 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(RTCINT), isr, FALLING);
 
   // Initialize SD card Module
+  bool sd_en = true;
   Serial.print("# Initialize SD card...");
   SPI.begin(sck, miso, mosi, cs);
   if(!SD.begin(cs)) {
     Serial.println("Card Mount Failed");
-    db_ready &= ~CARD;
+    sd_en = false;
   }
   uint8_t cardType = SD.cardType();
-  if((cardType == CARD_NONE) && (db_ready & CARD)) {
+  if((cardType == CARD_NONE) && sd_en) {
     Serial.println("No SD card attached");
-    db_ready &= ~CARD;
+    sd_en = false;
   }
-  if(db_ready & CARD) {
+  if(sd_en) {
     Serial.println("DONE");
     File file = SD.open(logFile);
     if(!file) {
@@ -160,7 +161,7 @@ void setup() {
       const char *header = "projectName,date,time,"
                            "w-speed,w-direction,"
                            "e-volt_A,e-current_A,e-power_A,e-energy_A,"
-                           "e-volt_B,e-current_B,e-power_B,e-energy_B";
+                           "e-volt_B,e-current_B,e-power_B,e-energy_B\r\n";
       writeFile(SD, logFile, header);
     }
     else {
@@ -208,7 +209,7 @@ void loop() {
     float totalActB = m_rtu.recv_float(SDM_ADDR_B);
     Serial.println("Total Active Energy (meter_B) : " + (String)totalActB + " kWh");
 
-    DateTime dt = rtc.now();
+    DateTime dt = DateTime(rtcTime_st + (millis()/1000));
   
     String packet = "Weather-NBIoT,"; 
     packet += dt.timestamp(DateTime::TIMESTAMP_DATE);
@@ -242,7 +243,7 @@ void loop() {
       // send data via NB-IoT
       modem.sendUDPstr(HOST,PORT,packet);
       // save data in SD-Card
-      if(db_ready & CARD) {
+      if(SD.begin(cs)) {
         Serial.println("Save data to SDcard...");
         packet += "\r\n";
         appendFile(SD, logFile, packet.c_str());

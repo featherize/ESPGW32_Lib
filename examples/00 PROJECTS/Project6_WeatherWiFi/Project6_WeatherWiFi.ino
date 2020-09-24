@@ -7,7 +7,7 @@
  * Packet format : <projectName>,<date>,<time>,<w-speed>,<w-direction>,
  *                 <e-volt_A>,<e-current_A>,<e-power_A>,<e-energy_A>,
  *                 <e-volt_B>,<e-current_B>,<e-power_B>,<e-energy_B>
- * Last update   : 04 SEP 2020
+ * Last update   : 23 SEP 2020
  * Author        : CprE13-KMUTNB
  ***********************************************************************
  * Note : 
@@ -30,8 +30,8 @@
 #define SSID        ""    // WIFI name
 #define PASS        ""    // WIFI password
 
-#define HOST        ""      // server ip
-#define PORT        ""      // server udp port
+#define HOST        ""    // server ip
+#define PORT        ""    // server udp port
 
 #define YGCFS_ADDR     4
 #define YGCFX_ADDR     5
@@ -52,10 +52,8 @@ int miso = 19;
 int mosi = 18;
 int cs = 14;
 const char *logFile = "/datalogs.txt";
-
-#define INET   0x10
-#define CARD   0x01
-uint8_t db_ready = 0x11;	// internet || sdcard
+bool ntpUpdated = false;
+unsigned long rtcTime_st;    // RTC time when setup() is running
 
 void writeFile(fs::FS &fs, const char * path, const char * message){
   Serial.printf("Writing file: %s\n", path);
@@ -106,6 +104,7 @@ void setup() {
 
   // init WIFI
   Serial.println("# Initialize WiFi...");
+  bool wifi_en = true;
   WiFi.begin(SSID, PASS);
   uint8_t waitwifi = 20;
   while (WiFi.status() != WL_CONNECTED) { // wait for connection
@@ -114,18 +113,18 @@ void setup() {
     waitwifi--;
     if(waitwifi <= 0) {
       Serial.print("Connect Fail!");
-      db_ready &= ~INET;
+      wifi_en = false;
       break;
     }
   }
-  if(db_ready & INET) {
+  if(wifi_en) {
     Serial.println();
     Serial.print("Connected to ");
     Serial.println(SSID);
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
   }
-  udp.begin(String(PORT).toInt());
+  udp.begin(1234);	// open udp at port 1234
 
   // init RTC
   Serial.println("# Initialize RTC...");
@@ -135,9 +134,11 @@ void setup() {
   if(timeClient.update()) {
     Serial.println("Update time from NTP-Server to RTC");
     rtc.adjust(DateTime(timeClient.getEpochTime()));
+	ntpUpdated = true;
   }
   rtc.setAlarm1(6,00,00,0,false,'D');  // interrupt every day at 6am
   rtc.enableAlarm(1);
+  rtcTime_st = rtc.now().unixtime();
   Serial.println("Time   = " + rtc.currentTime());
   Serial.println("Alarm1 = " + rtc.getAlarm1());
 
@@ -147,28 +148,29 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(RTCINT), isr, FALLING);
 
   // Initialize SD card Module
+  bool sd_en = true;
   Serial.print("# Initialize SD card...");
   SPI.begin(sck, miso, mosi, cs);
   if(!SD.begin(cs)) {
     Serial.println("Card Mount Failed");
-    db_ready &= ~CARD;
+    sd_en = false;
   }
   uint8_t cardType = SD.cardType();
-  if((cardType == CARD_NONE) && (db_ready & CARD)) {
+  if((cardType == CARD_NONE) && sd_en) {
     Serial.println("No SD card attached");
-    db_ready &= ~CARD;
+    sd_en = false;
   }
-  if(db_ready & CARD) {
+  if(sd_en) {
     Serial.println("DONE");
     File file = SD.open(logFile);
     if(!file) {
       Serial.println("LogFile doesn't exist");
       Serial.println("Creating file...");
       // write header of file
-      const char *header = "\"projectName\",\"date\",\"time\","
-                           "\"w-speed\",\"w-direction\","
-                           "\"e-volt_A\",\"e-current_A\",\"e-power_A\",\"e-energy_A\","
-                           "\"e-volt_B\",\"e-current_B\",\"e-power_B\",\"e-energy_B\"";
+      const char *header = "projectName,date,time,"
+                           "w-speed,w-direction,"
+                           "e-volt_A,e-current_A,e-power_A,e-energy_A,"
+                           "e-volt_B,e-current_B,e-power_B,e-energy_B\r\n";
       writeFile(SD, logFile, header);
     }
     else {
@@ -176,7 +178,7 @@ void setup() {
     }
     file.close();
   }
-  if(db_ready == 0) {
+  if(wifi_en || sd_en) {
     Serial.println("# Cannot connect to both WiFi and SDCard");
     Serial.println("# Restart ESP");
     Serial.println("**************************************************");
@@ -191,6 +193,17 @@ void loop() {
   if(curr_t-prev_t > interval || prev_t == 0) {
     prev_t = curr_t;
 
+    // if lost connection, then reconnect
+    if(WiFi.status() != WL_CONNECTED) {
+      Serial.println("Connection lost!");
+      WiFi.reconnect();
+      Serial.print("Reconnecting to ");
+      Serial.println(SSID);
+      delay(5000);
+      Serial.print("IP address: ");
+      Serial.println(WiFi.localIP());
+    }
+	
     m_rtu.sendReadHolding(YGCFS_ADDR,0,1);      // read wind speed
     float windspeed = ((float)m_rtu.recv_int(YGCFS_ADDR))/10;
     Serial.println("Wind speed                    : " + (String)windspeed + " m/s");
@@ -222,7 +235,11 @@ void loop() {
     float totalActB = m_rtu.recv_float(SDM_ADDR_B);
     Serial.println("Total Active Energy (meter_B) : " + (String)totalActB + " kWh");
 
-    DateTime dt = rtc.now();
+    DateTime dt;
+    if(ntpUpdated) 
+      dt = DateTime(timeClient.getEpochTime());
+    else 
+      dt = DateTime(rtcTime_st + (millis()/1000));
   
     String packet = "Weather-Station,"; 
     packet += dt.timestamp(DateTime::TIMESTAMP_DATE);
@@ -249,7 +266,7 @@ void loop() {
     packet += ",";
     packet += (String)totalActB;
     
-    // When no INTERRUPT 
+    // Send the packet When there's no INTERRUPT 
     if(cntInt == 0) {
       Serial.print("packet send : ");
       Serial.println(packet);
@@ -261,14 +278,13 @@ void loop() {
       udp.endPacket();
       memset(udpPack, 0, 150);  // clean buffer
       // save data in SD-Card
-      if(db_ready & CARD) {
+      if(SD.begin(cs)) {
         Serial.println("Save data to SDcard...");
         packet += "\r\n";
         appendFile(SD, logFile, packet.c_str());
       }
       else {
-        Serial.println("SDcard is unavailable...");
-        Serial.println("To use SDcard, please fix connection then restart ESP");
+        Serial.println("SDcard is unavailable!");
       }
       Serial.println("<---------------------------------------->");
     }
@@ -277,9 +293,5 @@ void loop() {
   // When ESP32 is interrupted by RTC
   if(cntInt > 0) {
     ESP.restart();    // restart ESP when got an interrupt
-  }
-
-  if(WiFi.status() != WL_CONNECTED) {
-    WiFi.reconnect();
   }
 }
