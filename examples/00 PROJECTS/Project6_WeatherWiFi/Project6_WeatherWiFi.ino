@@ -178,7 +178,7 @@ void setup() {
     }
     file.close();
   }
-  if(wifi_en || sd_en) {
+  if(!(wifi_en || sd_en)) {
     Serial.println("# Cannot connect to both WiFi and SDCard");
     Serial.println("# Restart ESP");
     Serial.println("**************************************************");

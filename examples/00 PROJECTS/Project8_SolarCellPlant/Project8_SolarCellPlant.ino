@@ -8,7 +8,7 @@
  *                 [<AC1_?>,...],[<AC2_?>,...],[<AC3_?>,...],
  *                 [<AC4_?>,...],[<AC5_?>,...],[<DC1_?>,...],
  *                 [<DC2_?>,...],[<DC3_?>,...],[<DC4_?>,...]
- * Last update   : 07 DEC 2020
+ * Last update   : 08 DEC 2020
  * Author        : CprE13-KMUTNB
  ***********************************************************************
  * Note : 
@@ -215,7 +215,7 @@ void setup() {
     }
     file.close();
   }
-  if(wifi_en || sd_en) {
+  if(!(wifi_en || sd_en)) {
     Serial.println(F("# Cannot connect to both WiFi and SDCard"));
     Serial.println(F("# Restart ESP"));
     Serial.println(F("**************************************************"));
